@@ -11,6 +11,8 @@
   "dependencies": {
     "@cs2-bot/config": "workspace:*",
     "@cs2-bot/connectors": "workspace:*",
+    "@cs2-bot/core": "workspace:*",
+    "@cs2-bot/db": "workspace:*",
     "bullmq": "^5.51.1",
     "ioredis": "^5.6.1",
     "pino": "^9.6.0",

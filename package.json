@@ -17,6 +17,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
+    "collect:market-csgo": "tsx apps/worker/src/collect-market-csgo.ts",
+    "collect:skinport": "tsx apps/worker/src/collect-skinport.ts",
     "dev:api": "pnpm --filter @cs2-bot/api dev",
     "dev:worker": "pnpm --filter @cs2-bot/worker dev",
     "dev:bot": "pnpm --filter @cs2-bot/bot dev"
@@ -26,6 +28,7 @@
     "@types/node": "^24.0.0",
     "@types/pg": "^8.11.14",
     "dotenv": "^17.4.2",
+    "dotenv-cli": "^11.0.0",
     "drizzle-kit": "^0.31.1",
     "eslint": "^9.25.1",
     "tsx": "^4.19.4",

@@ -7,6 +7,7 @@ export const EnvSchema = z.object({
   API_PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
+  DB_INSERT_BATCH_SIZE: z.coerce.number().int().min(1).default(250),
   MARKET_CSGO_API_KEY: z.string().min(1).optional(),
   SKINPORT_API_KEY: z.string().min(1).optional(),
   CSFLOAT_API_KEY: z.string().min(1).optional(),

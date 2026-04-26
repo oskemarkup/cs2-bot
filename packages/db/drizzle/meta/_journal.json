@@ -8,6 +8,13 @@
       "when": 1777200614586,
       "tag": "0000_burly_mephisto",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777201405173,
+      "tag": "0001_clever_speed_demon",
+      "breakpoints": true
     }
   ]
 }

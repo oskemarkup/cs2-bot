@@ -1,9 +1,9 @@
-import pino from "pino";
 import { loadConfig } from "@cs2-bot/config";
+import { createLogger } from "@cs2-bot/core";
 import { allowedSystemModes } from "@cs2-bot/risk";
 
 const config = loadConfig();
-const logger = pino({ level: config.LOG_LEVEL });
+const logger = createLogger({ level: config.LOG_LEVEL });
 
 logger.info(
   {

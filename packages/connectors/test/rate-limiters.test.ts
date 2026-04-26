@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createConnectorRateLimiters, validateConnectorResponse } from "../src/index.js";
+import { createConnectorRateLimiters, getConnectorLimiterDefaults, validateConnectorResponse } from "../src/index.js";
 
 describe("connectors", () => {
   it("creates an independent limiter for each marketplace", () => {
@@ -8,6 +8,16 @@ describe("connectors", () => {
     expect(limiters.market_csgo).not.toBe(limiters.skinport);
     expect(limiters.skinport).not.toBe(limiters.csfloat);
     expect(limiters.csfloat).not.toBe(limiters.dmarket);
+  });
+
+  it("uses conservative per-marketplace limiter defaults", () => {
+    const defaults = getConnectorLimiterDefaults();
+
+    expect(defaults.market_csgo.minTime).toBeGreaterThanOrEqual(334);
+    expect(defaults.market_csgo.maxConcurrent).toBe(1);
+    expect(defaults.skinport.reservoir).toBe(8);
+    expect(defaults.skinport.reservoirRefreshAmount).toBe(8);
+    expect(defaults.skinport.reservoirRefreshInterval).toBe(300_000);
   });
 
   it("validates connector responses with Zod", () => {

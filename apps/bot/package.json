@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@cs2-bot/config": "workspace:*",
+    "@cs2-bot/core": "workspace:*",
     "@cs2-bot/risk": "workspace:*",
     "pino": "^9.6.0"
   }
