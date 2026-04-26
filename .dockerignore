@@ -1,0 +1,16 @@
+node_modules
+dist
+**/dist
+.env
+.env.*
+!.env.example
+logs
+*.log
+coverage
+.git
+.pnpm-store
+.DS_Store
+tmp
+temp
+*.tmp
+*.tsbuildinfo

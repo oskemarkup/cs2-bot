@@ -1,0 +1,11 @@
+# Market.CSGO hourly
+5 * * * * node apps/worker/dist/cli.js collect market-csgo
+
+# Skinport hourly
+15 * * * * node apps/worker/dist/cli.js collect skinport
+
+# Retention cleanup daily
+30 3 * * * node apps/worker/dist/cli.js cleanup retention
+
+# Health every 10 minutes
+*/10 * * * * node apps/worker/dist/cli.js health

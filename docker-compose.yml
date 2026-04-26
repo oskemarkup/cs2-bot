@@ -1,34 +1,45 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: cs2-bot-postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: cs2_bot
-      POSTGRES_PASSWORD: cs2_bot
-      POSTGRES_DB: cs2_bot
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cs2_bot -d cs2_bot"]
-      interval: 5s
-      timeout: 3s
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
       retries: 10
+      start_period: 10s
 
-  redis:
-    image: redis:7-alpine
-    container_name: cs2-bot-redis
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["supercronic", "-no-reap", "/app/deploy/crontab"]
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["node", "apps/api/dist/index.js"]
     ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+      - "127.0.0.1:${API_PORT:-3000}:${API_PORT:-3000}"
 
 volumes:
   postgres-data:
-  redis-data:

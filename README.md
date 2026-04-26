@@ -55,6 +55,16 @@ TEST_DATABASE_URL=postgresql://cs2_bot:cs2_bot@localhost:5432/cs2_bot pnpm test
 
 If migrations already exist, skip `pnpm db:generate` and run only `pnpm db:migrate`.
 
+## Production Deploy
+
+Production deployment is declared in Docker Compose and documented in [deploy/README.md](deploy/README.md).
+
+```bash
+cp .env.example .env
+docker compose --env-file .env up -d --build
+docker compose logs -f scheduler
+```
+
 ## Workspace
 
 - `apps/api` - Fastify HTTP API and health checks.
