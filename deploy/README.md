@@ -42,12 +42,10 @@ docker compose --env-file .env run --rm scheduler node apps/worker/dist/cli.js c
 ## Update
 
 ```bash
-git pull
-docker compose --env-file .env up -d --build
-docker compose --env-file .env run --rm scheduler pnpm db:migrate
+./deploy/deploy.sh
 ```
 
-Run the migration command when migrations changed.
+The script pulls the latest changes, rebuilds images, runs migrations through the scheduler image, and starts services in detached mode.
 
 ## Stop
 
