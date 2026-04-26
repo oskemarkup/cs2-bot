@@ -202,6 +202,35 @@ export const itemListingSnapshots = pgTable(
   })
 );
 
+export const itemListingCurrent = pgTable(
+  "item_listing_current",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    marketplace: marketplaceCode("marketplace").notNull(),
+    identityKey: text("identity_key").notNull(),
+    externalId: text("external_id"),
+    marketHashName: text("market_hash_name").notNull(),
+    priceMinor: bigint("price_minor", { mode: "bigint" }).notNull(),
+    currency: char("currency", { length: 3 }).notNull(),
+    quantity: integer("quantity"),
+    rawPayload: jsonb("raw_payload").$type<unknown>(),
+    contentHash: char("content_hash", { length: 64 }).notNull(),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+    lastChangedAt: timestamp("last_changed_at", { withTimezone: true }).notNull(),
+    lastHistoryAt: timestamp("last_history_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull()
+  },
+  (table) => ({
+    marketplaceIdentityKeyIdx: uniqueIndex("item_listing_current_marketplace_identity_key_idx").on(
+      table.marketplace,
+      table.identityKey
+    ),
+    marketplaceNameIdx: index("item_listing_current_marketplace_name_idx").on(table.marketplace, table.marketHashName),
+    lastSeenAtIdx: index("item_listing_current_last_seen_at_idx").on(table.lastSeenAt)
+  })
+);
+
 export const salesStatsSnapshots = pgTable(
   "sales_stats_snapshot",
   {
@@ -227,6 +256,36 @@ export const salesStatsSnapshots = pgTable(
       table.marketHashName,
       table.observedAt
     )
+  })
+);
+
+export const salesStatsCurrent = pgTable(
+  "sales_stats_current",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    marketplace: marketplaceCode("marketplace").notNull(),
+    identityKey: text("identity_key").notNull(),
+    marketHashName: text("market_hash_name").notNull(),
+    currency: char("currency", { length: 3 }).notNull(),
+    salesCount: integer("sales_count"),
+    minPriceMinor: bigint("min_price_minor", { mode: "bigint" }),
+    maxPriceMinor: bigint("max_price_minor", { mode: "bigint" }),
+    avgPriceMinor: bigint("avg_price_minor", { mode: "bigint" }),
+    rawPayload: jsonb("raw_payload").$type<unknown>(),
+    contentHash: char("content_hash", { length: 64 }).notNull(),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+    lastChangedAt: timestamp("last_changed_at", { withTimezone: true }).notNull(),
+    lastHistoryAt: timestamp("last_history_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull()
+  },
+  (table) => ({
+    marketplaceIdentityKeyIdx: uniqueIndex("sales_stats_current_marketplace_identity_key_idx").on(
+      table.marketplace,
+      table.identityKey
+    ),
+    marketplaceNameIdx: index("sales_stats_current_marketplace_name_idx").on(table.marketplace, table.marketHashName),
+    lastSeenAtIdx: index("sales_stats_current_last_seen_at_idx").on(table.lastSeenAt)
   })
 );
 

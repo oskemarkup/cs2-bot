@@ -1,5 +1,6 @@
 export interface BatchInsertLogger {
   info(payload: Record<string, unknown>, message: string): void;
+  debug?(payload: Record<string, unknown>, message: string): void;
   error(payload: Record<string, unknown>, message: string): void;
 }
 
@@ -69,7 +70,7 @@ export async function insertInBatches<Row>(options: InsertInBatchesOptions<Row>)
     try {
       await options.insertRows(batch);
 
-      options.logger?.info(
+      options.logger?.debug?.(
         {
           table: options.table,
           totalRows: options.rows.length,
@@ -78,7 +79,7 @@ export async function insertInBatches<Row>(options: InsertInBatchesOptions<Row>)
           batchRows: batch.length,
           durationMs: Date.now() - startedAt
         },
-        "db batch insert finished"
+        "db batch inserted"
       );
     } catch (error) {
       options.logger?.error(
@@ -102,4 +103,14 @@ export async function insertInBatches<Row>(options: InsertInBatchesOptions<Row>)
       });
     }
   }
+
+  options.logger?.info(
+    {
+      table: options.table,
+      totalRows: options.rows.length,
+      batchSize,
+      batchCount: batches.length
+    },
+    "db batch insert finished"
+  );
 }

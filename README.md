@@ -32,6 +32,7 @@ pnpm db:generate
 pnpm db:migrate
 pnpm exec dotenv -e .env -- pnpm collect:market-csgo
 pnpm exec dotenv -e .env -- pnpm collect:skinport
+pnpm cleanup:retention
 pnpm typecheck
 pnpm test
 pnpm lint
@@ -106,11 +107,70 @@ pnpm exec dotenv -e .env -- pnpm collect:market-csgo
 pnpm exec dotenv -e .env -- pnpm collect:skinport
 ```
 
-Collectors save every validated API response to `raw_snapshot` with status, headers, endpoint, params hash, and fetch timestamp. Normalized read-only data is stored in `item_listing_snapshot` and `sales_stats_snapshot`; ambiguous fields remain available in the raw JSON payload.
+Collectors save validated API response metadata to `raw_snapshot` with status, headers, endpoint, params hash, and fetch timestamp. `RAW_SNAPSHOT_MODE=all` stores the full raw JSON body, `metadata_only` stores hash/size/item-count metadata without the full body, and `sample_on_failure` stores metadata for successful responses plus a 500-character failure preview for failed responses. The development/test default is `all`; production should use `metadata_only`.
 
 Collectors log every marketplace API request with `marketplace`, endpoint name, method, attempt, status, duration, and retryability. URLs in logs are sanitized so query params such as `key`, `token`, `api_key`, and `authorization` are redacted. Set `LOG_LEVEL=debug` before the command when you need more verbose logs.
 
-`DB_INSERT_BATCH_SIZE` controls normalized snapshot insert batch size and defaults to `250`.
+`SNAPSHOT_STORAGE_MODE=full` preserves the append-only snapshot behavior and is the development/test default. `SNAPSHOT_STORAGE_MODE=current_and_changes` keeps `item_listing_current` and `sales_stats_current` up to date, inserts history only for new rows, changed rows, or unchanged rows whose last history row is older than `FORCE_FULL_HISTORY_EVERY_HOURS`, and skips fresh unchanged rows entirely. Production should use `current_and_changes`.
+
+`CURRENT_LAST_SEEN_UPDATE_INTERVAL_MINUTES` controls how often unchanged current rows are touched and defaults to `60`. Set it to `0` to update `last_seen_at` on every run. This interval exists because PostgreSQL `UPDATE` creates new row versions, so repeatedly updating only `last_seen_at`/`updated_at` can grow the database even when history tables do not grow.
+
+`DB_INSERT_BATCH_SIZE` controls normalized snapshot/current upsert batch size and defaults to `250`. `LOG_LEVEL=debug` enables per-batch insert details; at `info`, collectors only log bulk insert start and finish messages.
+
+To verify unchanged current rows are skipped locally, run the same collector twice against a clean collector dataset:
+
+```bash
+SNAPSHOT_STORAGE_MODE=current_and_changes RAW_SNAPSHOT_MODE=metadata_only CURRENT_LAST_SEEN_UPDATE_INTERVAL_MINUTES=60 pnpm exec dotenv -e .env -- pnpm collect:skinport
+SNAPSHOT_STORAGE_MODE=current_and_changes RAW_SNAPSHOT_MODE=metadata_only CURRENT_LAST_SEEN_UPDATE_INTERVAL_MINUTES=60 pnpm exec dotenv -e .env -- pnpm collect:skinport
+```
+
+The second run should not add duplicate history rows, should log high `skippedUnchanged`, should log `seenOnlyUpdated` near `0` when `last_seen_at` is fresh, and should not grow the database by tens of MB.
+
+Retention cleanup is available after build as:
+
+```bash
+node apps/worker/dist/cli.js cleanup retention
+```
+
+For development:
+
+```bash
+pnpm cleanup:retention
+```
+
+Retention is controlled by `RAW_SNAPSHOT_RETENTION_DAYS=7`, `HISTORY_SNAPSHOT_RETENTION_DAYS=30`, and `COLLECTOR_RUN_RETENTION_DAYS=90`. Cleanup deletes in batches and logs deleted counts per table.
+
+## Storage Diagnostics
+
+Row counts by marketplace:
+
+```sql
+select marketplace, count(*) from item_listing_snapshot group by marketplace;
+select marketplace, count(*) from sales_stats_snapshot group by marketplace;
+select marketplace, count(*) from raw_snapshot group by marketplace;
+```
+
+Database size:
+
+```sql
+select pg_size_pretty(pg_database_size(current_database())) as db_size;
+```
+
+Table sizes with TOAST separated:
+
+```sql
+select
+  c.relname as table_name,
+  pg_size_pretty(pg_relation_size(c.oid)) as table_size,
+  pg_size_pretty(pg_indexes_size(c.oid)) as indexes_size,
+  pg_size_pretty(pg_total_relation_size(c.reltoastrelid)) as toast_size,
+  pg_size_pretty(pg_total_relation_size(c.oid)) as total_size
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public'
+  and c.relkind = 'r'
+order by pg_total_relation_size(c.oid) desc;
+```
 
 ## Collector Troubleshooting
 

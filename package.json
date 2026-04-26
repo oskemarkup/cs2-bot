@@ -19,6 +19,7 @@
     "db:push": "drizzle-kit push",
     "collect:market-csgo": "tsx apps/worker/src/collect-market-csgo.ts",
     "collect:skinport": "tsx apps/worker/src/collect-skinport.ts",
+    "cleanup:retention": "tsx apps/worker/src/cli.ts cleanup retention",
     "dev:api": "pnpm --filter @cs2-bot/api dev",
     "dev:worker": "pnpm --filter @cs2-bot/worker dev",
     "dev:bot": "pnpm --filter @cs2-bot/bot dev"

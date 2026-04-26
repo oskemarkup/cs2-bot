@@ -35,10 +35,11 @@ describe("insertInBatches", () => {
   });
 
   it("logs batchIndex and table", async () => {
-    const logs: Array<{ payload: Record<string, unknown>; message: string }> = [];
+    const logs: Array<{ level: string; payload: Record<string, unknown>; message: string }> = [];
     const logger: BatchInsertLogger = {
-      info: (payload, message) => logs.push({ payload, message }),
-      error: (payload, message) => logs.push({ payload, message })
+      info: (payload, message) => logs.push({ level: "info", payload, message }),
+      debug: (payload, message) => logs.push({ level: "debug", payload, message }),
+      error: (payload, message) => logs.push({ level: "error", payload, message })
     };
 
     await insertInBatches({
@@ -49,8 +50,46 @@ describe("insertInBatches", () => {
       insertRows: async () => undefined
     });
 
-    expect(logs.some((log) => log.payload["table"] === "sales_stats_snapshot" && log.payload["batchIndex"] === 1)).toBe(true);
-    expect(logs.some((log) => log.payload["table"] === "sales_stats_snapshot" && log.payload["batchIndex"] === 2)).toBe(true);
+    expect(logs.filter((log) => log.level === "info").map((log) => log.message)).toEqual([
+      "db batch insert started",
+      "db batch insert finished"
+    ]);
+    expect(
+      logs.some(
+        (log) =>
+          log.level === "debug" && log.payload["table"] === "sales_stats_snapshot" && log.payload["batchIndex"] === 1
+      )
+    ).toBe(true);
+    expect(
+      logs.some(
+        (log) =>
+          log.level === "debug" && log.payload["table"] === "sales_stats_snapshot" && log.payload["batchIndex"] === 2
+      )
+    ).toBe(true);
+  });
+
+  it("logs failed batches with err", async () => {
+    const logs: Array<{ payload: Record<string, unknown>; message: string }> = [];
+    const logger: BatchInsertLogger = {
+      info: (payload, message) => logs.push({ payload, message }),
+      error: (payload, message) => logs.push({ payload, message })
+    };
+
+    await expect(
+      insertInBatches({
+        table: "item_listing_snapshot",
+        rows: [{ id: 1 }],
+        logger,
+        insertRows: async () => {
+          throw new Error("db failed");
+        }
+      })
+    ).rejects.toThrow("db failed");
+
+    const failure = logs.find((log) => log.message === "db batch insert failed");
+
+    expect(failure?.payload["err"]).toBeInstanceOf(Error);
+    expect(failure?.payload).not.toHaveProperty("error");
   });
 
   it("propagates DB error with table and batch context", async () => {
