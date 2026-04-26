@@ -1,0 +1,21 @@
+{
+  "name": "@cs2-bot/connectors",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json --pretty false"
+  },
+  "dependencies": {
+    "@cs2-bot/core": "workspace:*",
+    "bottleneck": "^2.19.5",
+    "zod": "^3.24.3"
+  }
+}

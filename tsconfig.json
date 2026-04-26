@@ -1,0 +1,15 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/config" },
+    { "path": "./packages/db" },
+    { "path": "./packages/connectors" },
+    { "path": "./packages/risk" },
+    { "path": "./packages/alerts" },
+    { "path": "./packages/backtest" },
+    { "path": "./apps/api" },
+    { "path": "./apps/worker" },
+    { "path": "./apps/bot" }
+  ]
+}

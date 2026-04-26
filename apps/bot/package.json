@@ -1,0 +1,16 @@
+{
+  "name": "@cs2-bot/bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json --pretty false"
+  },
+  "dependencies": {
+    "@cs2-bot/config": "workspace:*",
+    "@cs2-bot/risk": "workspace:*",
+    "pino": "^9.6.0"
+  }
+}

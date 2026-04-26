@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "useUnknownInCatchVariables": true,
+    "verbatimModuleSyntax": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "composite": true,
+    "baseUrl": ".",
+    "paths": {
+      "@cs2-bot/alerts": ["packages/alerts/src/index.ts"],
+      "@cs2-bot/backtest": ["packages/backtest/src/index.ts"],
+      "@cs2-bot/config": ["packages/config/src/index.ts"],
+      "@cs2-bot/connectors": ["packages/connectors/src/index.ts"],
+      "@cs2-bot/core": ["packages/core/src/index.ts"],
+      "@cs2-bot/db": ["packages/db/src/index.ts"],
+      "@cs2-bot/risk": ["packages/risk/src/index.ts"]
+    }
+  }
+}

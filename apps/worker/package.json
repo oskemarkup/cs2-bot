@@ -1,0 +1,19 @@
+{
+  "name": "@cs2-bot/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json --pretty false"
+  },
+  "dependencies": {
+    "@cs2-bot/config": "workspace:*",
+    "@cs2-bot/connectors": "workspace:*",
+    "bullmq": "^5.51.1",
+    "ioredis": "^5.6.1",
+    "pino": "^9.6.0",
+    "zod": "^3.24.3"
+  }
+}

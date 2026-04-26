@@ -1,0 +1,37 @@
+{
+  "name": "cs2-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.9.0",
+  "engines": {
+    "node": ">=24 <25",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "tsc -b --pretty false",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "dev:api": "pnpm --filter @cs2-bot/api dev",
+    "dev:worker": "pnpm --filter @cs2-bot/worker dev",
+    "dev:bot": "pnpm --filter @cs2-bot/bot dev"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.25.1",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.11.14",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.1",
+    "eslint": "^9.25.1",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.31.0",
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^3.1.2"
+  }
+}
