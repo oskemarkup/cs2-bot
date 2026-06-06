@@ -9,6 +9,7 @@
     "typecheck": "tsc -b tsconfig.json --pretty false"
   },
   "dependencies": {
+    "@cs2-bot/alerts": "workspace:*",
     "@cs2-bot/config": "workspace:*",
     "@cs2-bot/connectors": "workspace:*",
     "@cs2-bot/core": "workspace:*",

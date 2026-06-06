@@ -2,13 +2,12 @@ import { Queue, Worker } from "bullmq";
 import { Redis } from "ioredis";
 import { z } from "zod";
 import { loadConfig, type AppConfig } from "@cs2-bot/config";
-import { MarketplaceSchema } from "@cs2-bot/connectors";
 import { createLogger } from "@cs2-bot/core";
 
 export const collectionQueueName = "read-only-marketplace-collection";
 
 export const CollectionJobSchema = z.object({
-  marketplace: MarketplaceSchema,
+  marketplace: z.literal("market_csgo"),
   requestedAt: z.coerce.date()
 });
 

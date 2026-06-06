@@ -1,6 +1,7 @@
 import { relations } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   char,
   index,
   integer,
@@ -18,6 +19,9 @@ export const marketplaceCode = pgEnum("marketplace_code", ["market_csgo", "skinp
 export const alertStatus = pgEnum("alert_status", ["new", "acknowledged", "dismissed"]);
 export const paperTradeSide = pgEnum("paper_trade_side", ["buy", "sell"]);
 export const collectorRunStatus = pgEnum("collector_run_status", ["running", "succeeded", "failed"]);
+export const tradeSignalSide = pgEnum("trade_signal_side", ["buy", "sell"]);
+export const tradeSignalStatus = pgEnum("trade_signal_status", ["new", "sent", "dismissed"]);
+export const manualPositionStatus = pgEnum("manual_position_status", ["open", "closed"]);
 
 export const marketplaces = pgTable(
   "marketplace",
@@ -110,6 +114,137 @@ export const paperTrades = pgTable(
   },
   (table) => ({
     itemCreatedAtIdx: index("paper_trades_item_created_at_idx").on(table.itemId, table.createdAt)
+  })
+);
+
+export const signalWatchlist = pgTable(
+  "signal_watchlist",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    marketplace: marketplaceCode("marketplace").notNull().default("market_csgo"),
+    marketHashName: text("market_hash_name").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    minPriceMinor: bigint("min_price_minor", { mode: "bigint" }),
+    maxPriceMinor: bigint("max_price_minor", { mode: "bigint" }),
+    minSalesCount: integer("min_sales_count"),
+    notes: varchar("notes", { length: 500 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    marketplaceNameIdx: uniqueIndex("signal_watchlist_marketplace_name_idx").on(table.marketplace, table.marketHashName),
+    enabledMarketplaceIdx: index("signal_watchlist_enabled_marketplace_idx").on(table.enabled, table.marketplace)
+  })
+);
+
+export const marketBaselineSnapshots = pgTable(
+  "market_baseline_snapshot",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    marketplace: marketplaceCode("marketplace").notNull().default("market_csgo"),
+    baselineKey: text("baseline_key").notNull(),
+    currency: char("currency", { length: 3 }).notNull(),
+    itemsCount: integer("items_count").notNull(),
+    medianReturnBps: integer("median_return_bps").notNull(),
+    dispersionBps: integer("dispersion_bps").notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull()
+  },
+  (table) => ({
+    keyObservedAtIdx: index("market_baseline_snapshot_key_observed_at_idx").on(
+      table.marketplace,
+      table.baselineKey,
+      table.observedAt
+    )
+  })
+);
+
+export const itemPriceFeatures = pgTable(
+  "item_price_feature",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    marketplace: marketplaceCode("marketplace").notNull().default("market_csgo"),
+    marketHashName: text("market_hash_name").notNull(),
+    currency: char("currency", { length: 3 }).notNull(),
+    priceMinor: bigint("price_minor", { mode: "bigint" }).notNull(),
+    fairValueMinor: bigint("fair_value_minor", { mode: "bigint" }).notNull(),
+    referencePriceMinor: bigint("reference_price_minor", { mode: "bigint" }).notNull(),
+    rollingMedianPriceMinor: bigint("rolling_median_price_minor", { mode: "bigint" }).notNull(),
+    itemReturnBps: integer("item_return_bps").notNull(),
+    baselineReturnBps: integer("baseline_return_bps").notNull(),
+    residualBps: integer("residual_bps").notNull(),
+    zScoreBps: integer("z_score_bps"),
+    volatilityBps: integer("volatility_bps").notNull(),
+    liquidityScoreBps: integer("liquidity_score_bps").notNull(),
+    salesCount: integer("sales_count"),
+    quantity: integer("quantity"),
+    cohortKey: text("cohort_key").notNull(),
+    baselineKey: text("baseline_key").notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull()
+  },
+  (table) => ({
+    nameObservedAtIdx: index("item_price_feature_name_observed_at_idx").on(
+      table.marketplace,
+      table.marketHashName,
+      table.observedAt
+    ),
+    residualObservedAtIdx: index("item_price_feature_residual_observed_at_idx").on(table.residualBps, table.observedAt)
+  })
+);
+
+export const manualPositions = pgTable(
+  "manual_position",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    marketplace: marketplaceCode("marketplace").notNull().default("market_csgo"),
+    marketHashName: text("market_hash_name").notNull(),
+    buyPriceMinor: bigint("buy_price_minor", { mode: "bigint" }).notNull(),
+    currency: char("currency", { length: 3 }).notNull(),
+    quantity: integer("quantity").notNull().default(1),
+    boughtAt: timestamp("bought_at", { withTimezone: true }).notNull(),
+    expectedUnlockAt: timestamp("expected_unlock_at", { withTimezone: true }).notNull(),
+    actualUnlockAt: timestamp("actual_unlock_at", { withTimezone: true }),
+    status: manualPositionStatus("status").notNull().default("open"),
+    notes: varchar("notes", { length: 500 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    statusUnlockIdx: index("manual_position_status_unlock_idx").on(table.status, table.expectedUnlockAt),
+    marketplaceNameIdx: index("manual_position_marketplace_name_idx").on(table.marketplace, table.marketHashName)
+  })
+);
+
+export const tradeSignals = pgTable(
+  "trade_signal",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    positionId: uuid("position_id").references(() => manualPositions.id),
+    marketplace: marketplaceCode("marketplace").notNull().default("market_csgo"),
+    marketHashName: text("market_hash_name").notNull(),
+    side: tradeSignalSide("side").notNull(),
+    status: tradeSignalStatus("status").notNull().default("new"),
+    priceMinor: bigint("price_minor", { mode: "bigint" }).notNull(),
+    fairValueMinor: bigint("fair_value_minor", { mode: "bigint" }).notNull(),
+    expectedProfitMinor: bigint("expected_profit_minor", { mode: "bigint" }).notNull(),
+    currency: char("currency", { length: 3 }).notNull(),
+    expectedEdgeBps: integer("expected_edge_bps").notNull(),
+    confidenceBps: integer("confidence_bps").notNull(),
+    baselineKey: text("baseline_key").notNull(),
+    residualBps: integer("residual_bps").notNull(),
+    reason: text("reason").notNull(),
+    evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => ({
+    statusCreatedAtIdx: index("trade_signal_status_created_at_idx").on(table.status, table.createdAt),
+    sideNameObservedAtIdx: index("trade_signal_side_name_observed_at_idx").on(
+      table.side,
+      table.marketplace,
+      table.marketHashName,
+      table.observedAt
+    )
   })
 );
 
@@ -318,5 +453,16 @@ export const paperTradeRelations = relations(paperTrades, ({ one }) => ({
   alert: one(arbitrageAlerts, {
     fields: [paperTrades.alertId],
     references: [arbitrageAlerts.id]
+  })
+}));
+
+export const manualPositionRelations = relations(manualPositions, ({ many }) => ({
+  signals: many(tradeSignals)
+}));
+
+export const tradeSignalRelations = relations(tradeSignals, ({ one }) => ({
+  position: one(manualPositions, {
+    fields: [tradeSignals.positionId],
+    references: [manualPositions.id]
   })
 }));

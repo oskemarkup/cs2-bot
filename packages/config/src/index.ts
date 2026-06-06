@@ -15,11 +15,31 @@ export const EnvSchema = z.object({
   RAW_SNAPSHOT_RETENTION_DAYS: z.coerce.number().int().min(1).default(7),
   HISTORY_SNAPSHOT_RETENTION_DAYS: z.coerce.number().int().min(1).default(30),
   COLLECTOR_RUN_RETENTION_DAYS: z.coerce.number().int().min(1).default(90),
+  SIGNAL_SNAPSHOT_RETENTION_DAYS: z.coerce.number().int().min(1).default(30),
+  TRADE_SIGNAL_RETENTION_DAYS: z.coerce.number().int().min(1).default(90),
+  SIGNAL_WATCHLIST: z.string().min(1).optional(),
+  SIGNAL_LOOKBACK_HOURS: z.coerce.number().int().min(1).default(168),
+  SIGNAL_ROLLING_WINDOW_HOURS: z.coerce.number().int().min(1).default(336),
+  SIGNAL_MIN_HISTORY_POINTS: z.coerce.number().int().min(2).default(3),
+  SIGNAL_MIN_BASELINE_ITEMS: z.coerce.number().int().min(2).default(3),
+  SIGNAL_MIN_PRICE_MINOR: z.coerce.bigint().nonnegative().default(100n),
+  SIGNAL_MIN_SALES_COUNT: z.coerce.number().int().min(0).default(3),
+  SIGNAL_BUY_RESIDUAL_BPS: z.coerce.number().int().min(1).default(800),
+  SIGNAL_BUY_ZSCORE_BPS: z.coerce.number().int().min(0).default(10_000),
+  SIGNAL_SELL_RESIDUAL_BPS: z.coerce.number().int().min(0).default(600),
+  SIGNAL_TAKE_PROFIT_BPS: z.coerce.number().int().min(0).default(1_200),
+  SIGNAL_MIN_EXPECTED_PROFIT_BPS: z.coerce.number().int().min(0).default(500),
+  SIGNAL_BUY_FEE_BPS: z.coerce.number().int().min(0).default(0),
+  SIGNAL_SELL_FEE_BPS: z.coerce.number().int().min(0).default(500),
+  SIGNAL_SAFETY_MARGIN_BPS: z.coerce.number().int().min(0).default(200),
+  SIGNAL_COOLDOWN_DAYS: z.coerce.number().int().min(1).default(8),
+  SIGNAL_DEDUP_WINDOW_HOURS: z.coerce.number().int().min(1).default(12),
   MARKET_CSGO_API_KEY: z.string().min(1).optional(),
   SKINPORT_API_KEY: z.string().min(1).optional(),
   CSFLOAT_API_KEY: z.string().min(1).optional(),
   DMARKET_API_KEY: z.string().min(1).optional(),
-  ALERT_WEBHOOK_URL: z.string().url().optional()
+  TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
+  TELEGRAM_CHAT_ID: z.string().min(1).optional()
 });
 
 export type AppConfig = z.infer<typeof EnvSchema>;

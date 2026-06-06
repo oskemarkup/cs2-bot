@@ -40,7 +40,9 @@ describe("cleanupRetention", () => {
       config: {
         RAW_SNAPSHOT_RETENTION_DAYS: 7,
         HISTORY_SNAPSHOT_RETENTION_DAYS: 30,
-        COLLECTOR_RUN_RETENTION_DAYS: 90
+        COLLECTOR_RUN_RETENTION_DAYS: 90,
+        SIGNAL_SNAPSHOT_RETENTION_DAYS: 14,
+        TRADE_SIGNAL_RETENTION_DAYS: 45
       },
       logger: {
         info: (payload) => logs.push(payload),
@@ -50,10 +52,12 @@ describe("cleanupRetention", () => {
       now: new Date("2026-04-26T00:00:00.000Z")
     });
 
-    expect(logs).toHaveLength(5);
-    expect(logs.map((log) => log["deletedRows"])).toEqual([0, 0, 0, 0, 0]);
+    expect(logs).toHaveLength(8);
+    expect(logs.map((log) => log["deletedRows"])).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
     expect(cutoffs.map((date) => date.toISOString())).toContain("2026-04-19T00:00:00.000Z");
     expect(cutoffs.map((date) => date.toISOString())).toContain("2026-03-27T00:00:00.000Z");
+    expect(cutoffs.map((date) => date.toISOString())).toContain("2026-04-12T00:00:00.000Z");
+    expect(cutoffs.map((date) => date.toISOString())).toContain("2026-03-12T00:00:00.000Z");
     expect(cutoffs.map((date) => date.toISOString())).toContain("2026-01-26T00:00:00.000Z");
   });
 });

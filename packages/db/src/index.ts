@@ -5,7 +5,7 @@ import * as schema from "./schema.js";
 const { Pool } = pg;
 
 export { schema };
-export { and, eq, inArray, sql } from "drizzle-orm";
+export { and, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 export * from "./schema.js";
 export * from "./batch.js";
 

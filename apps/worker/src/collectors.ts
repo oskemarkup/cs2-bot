@@ -6,7 +6,6 @@ import {
   createConnectorRateLimiters,
   MarketplaceHttpError,
   MarketCsgoConnector,
-  SkinportConnector,
   type Marketplace,
   type MarketplaceCollectionResult,
   type MarketplaceConnector
@@ -22,7 +21,7 @@ import {
 } from "./storage.js";
 
 interface CollectorCliOptions {
-  readonly marketplace: Extract<Marketplace, "market_csgo" | "skinport">;
+  readonly marketplace: Extract<Marketplace, "market_csgo">;
   readonly config?: AppConfig;
 }
 
@@ -75,15 +74,11 @@ export async function runCollectorCli(options: CollectorCliOptions): Promise<voi
 }
 
 function createConnector(
-  marketplace: Extract<Marketplace, "market_csgo" | "skinport">,
+  marketplace: Extract<Marketplace, "market_csgo">,
   limiters: ReturnType<typeof createConnectorRateLimiters>,
   logger?: ConnectorLogger
 ): MarketplaceConnector {
-  if (marketplace === "market_csgo") {
-    return new MarketCsgoConnector({ limiter: limiters.market_csgo, logger });
-  }
-
-  return new SkinportConnector({ limiter: limiters.skinport, logger });
+  return new MarketCsgoConnector({ limiter: limiters[marketplace], logger });
 }
 
 interface PersistMarketplaceCollectionOptions {

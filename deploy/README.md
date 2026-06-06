@@ -35,8 +35,13 @@ If you changed `POSTGRES_USER` or `POSTGRES_DB` in `.env`, use those values in t
 ## Manual Collector Run
 
 ```bash
-docker compose --env-file .env run --rm scheduler node apps/worker/dist/cli.js collect skinport
 docker compose --env-file .env run --rm scheduler node apps/worker/dist/cli.js collect market-csgo
+```
+
+## Manual Signal Run
+
+```bash
+docker compose --env-file .env run --rm scheduler node apps/worker/dist/cli.js signals run
 ```
 
 ## Update
@@ -89,6 +94,18 @@ limit 5;
 
 The JSON should contain metadata such as hashes, byte counts, and item counts rather than full API payloads.
 
+Check signal snapshot retention:
+
+```sql
+select 'market_baseline_snapshot' as table_name, count(*) from market_baseline_snapshot
+union all
+select 'item_price_feature' as table_name, count(*) from item_price_feature
+union all
+select 'trade_signal' as table_name, count(*) from trade_signal;
+```
+
+`SIGNAL_SNAPSHOT_RETENTION_DAYS` controls baseline/feature snapshots. `TRADE_SIGNAL_RETENTION_DAYS` controls sent/dismissed signal retention; unsent `new` signals are kept.
+
 Check collector runs:
 
 ```sql
@@ -104,4 +121,4 @@ Verify the schedule is running:
 docker compose logs --since=2h scheduler
 ```
 
-You should see hourly Market.CSGO and Skinport collector logs, daily retention logs, and health logs every 10 minutes.
+You should see hourly Market.CSGO collector logs, hourly signal logs, daily retention logs, and health logs every 10 minutes.

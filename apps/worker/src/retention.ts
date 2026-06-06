@@ -10,7 +10,11 @@ export interface RetentionCleanupOptions {
   readonly pool: Pick<pg.Pool, "query">;
   readonly config: Pick<
     AppConfig,
-    "RAW_SNAPSHOT_RETENTION_DAYS" | "HISTORY_SNAPSHOT_RETENTION_DAYS" | "COLLECTOR_RUN_RETENTION_DAYS"
+    | "RAW_SNAPSHOT_RETENTION_DAYS"
+    | "HISTORY_SNAPSHOT_RETENTION_DAYS"
+    | "COLLECTOR_RUN_RETENTION_DAYS"
+    | "SIGNAL_SNAPSHOT_RETENTION_DAYS"
+    | "TRADE_SIGNAL_RETENTION_DAYS"
   >;
   readonly logger: RetentionLogger;
   readonly batchSize?: number | undefined;
@@ -30,6 +34,8 @@ export async function cleanupRetention(options: RetentionCleanupOptions): Promis
   const rawCutoff = daysBefore(now, options.config.RAW_SNAPSHOT_RETENTION_DAYS);
   const historyCutoff = daysBefore(now, options.config.HISTORY_SNAPSHOT_RETENTION_DAYS);
   const collectorRunCutoff = daysBefore(now, options.config.COLLECTOR_RUN_RETENTION_DAYS);
+  const signalSnapshotCutoff = daysBefore(now, options.config.SIGNAL_SNAPSHOT_RETENTION_DAYS);
+  const tradeSignalCutoff = daysBefore(now, options.config.TRADE_SIGNAL_RETENTION_DAYS);
 
   await clearOldRawSnapshotReferences(options.pool, rawCutoff);
 
@@ -48,6 +54,22 @@ export async function cleanupRetention(options: RetentionCleanupOptions): Promis
       table: "api_rate_limit_observation",
       cutoff: rawCutoff,
       sql: deleteByTimestampSql("api_rate_limit_observation", "observed_at")
+    },
+    {
+      table: "market_baseline_snapshot",
+      cutoff: signalSnapshotCutoff,
+      sql: deleteByTimestampSql("market_baseline_snapshot", "observed_at")
+    },
+    {
+      table: "item_price_feature",
+      cutoff: signalSnapshotCutoff,
+      sql: deleteByTimestampSql("item_price_feature", "observed_at")
+    },
+    {
+      table: "trade_signal",
+      cutoff: tradeSignalCutoff,
+      sql: deleteOldResolvedTradeSignalsSql(),
+      skippedReason: "new signals are kept until they are sent or dismissed"
     },
     {
       table: "raw_snapshot",
@@ -75,6 +97,23 @@ export async function cleanupRetention(options: RetentionCleanupOptions): Promis
       "retention cleanup deleted rows"
     );
   }
+}
+
+function deleteOldResolvedTradeSignalsSql(): string {
+  return `
+    with doomed as (
+      select id
+      from trade_signal
+      where created_at < $1
+        and status <> 'new'
+      order by created_at
+      limit $2
+    )
+    delete from trade_signal
+    using doomed
+    where trade_signal.id = doomed.id
+    returning trade_signal.id
+  `;
 }
 
 export async function deleteInBatches(

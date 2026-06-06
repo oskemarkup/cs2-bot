@@ -1,8 +1,8 @@
 # Market.CSGO hourly
 5 * * * * node apps/worker/dist/cli.js collect market-csgo
 
-# Skinport hourly
-15 * * * * node apps/worker/dist/cli.js collect skinport
+# Market.CSGO signal evaluation
+20 * * * * node apps/worker/dist/cli.js signals run
 
 # Retention cleanup daily
 30 3 * * * node apps/worker/dist/cli.js cleanup retention

@@ -74,6 +74,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@cs2-bot/alerts':
+        specifier: workspace:*
+        version: link:../../packages/alerts
       '@cs2-bot/config':
         specifier: workspace:*
         version: link:../../packages/config

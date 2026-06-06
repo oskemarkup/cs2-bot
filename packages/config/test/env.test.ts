@@ -15,6 +15,11 @@ describe("loadConfig", () => {
     expect(config.DB_INSERT_BATCH_SIZE).toBe(250);
     expect(config.FORCE_FULL_HISTORY_EVERY_HOURS).toBe(24);
     expect(config.CURRENT_LAST_SEEN_UPDATE_INTERVAL_MINUTES).toBe(60);
+    expect(config.SIGNAL_SNAPSHOT_RETENTION_DAYS).toBe(30);
+    expect(config.TRADE_SIGNAL_RETENTION_DAYS).toBe(90);
+    expect(config.SIGNAL_LOOKBACK_HOURS).toBe(168);
+    expect(config.SIGNAL_COOLDOWN_DAYS).toBe(8);
+    expect(config.SIGNAL_SELL_FEE_BPS).toBe(500);
   });
 
   it("rejects missing database configuration", () => {

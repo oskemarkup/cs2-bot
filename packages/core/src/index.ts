@@ -13,7 +13,8 @@ const redactPaths = [
   "MARKET_CSGO_API_KEY",
   "SKINPORT_API_KEY",
   "CSFLOAT_API_KEY",
-  "DMARKET_API_KEY"
+  "DMARKET_API_KEY",
+  "TELEGRAM_BOT_TOKEN"
 ];
 
 export function serializeError(error: unknown): unknown {
