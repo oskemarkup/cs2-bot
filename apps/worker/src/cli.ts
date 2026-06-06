@@ -28,7 +28,7 @@ try {
 
 async function runSignalsCommand(args: readonly string[]): Promise<void> {
   if (args[0] === "run") {
-    await runSignalCli();
+    await runSignalCli(parseSignalRunOptions(args.slice(1)));
     return;
   }
 
@@ -97,12 +97,35 @@ async function runHealthCheck(): Promise<void> {
 function printUsage(): void {
   console.error(`Usage:
   node apps/worker/dist/cli.js collect market-csgo
-  node apps/worker/dist/cli.js signals run
+  node apps/worker/dist/cli.js signals run [--dry-run] [--no-alerts]
   node apps/worker/dist/cli.js signals watchlist add "AK-47 | Redline (Field-Tested)" --min-sales 10
   node apps/worker/dist/cli.js signals position add "AK-47 | Redline (Field-Tested)" --buy-price-minor 12345 --bought-at 2026-06-06T00:00:00.000Z
   node apps/worker/dist/cli.js signals position close <position-id>
   node apps/worker/dist/cli.js cleanup retention
   node apps/worker/dist/cli.js health`);
+}
+
+function parseSignalRunOptions(args: readonly string[]): { readonly dryRun: boolean; readonly sendAlerts: boolean } {
+  const options = {
+    dryRun: false,
+    sendAlerts: true
+  };
+
+  for (const arg of args) {
+    if (arg === "--dry-run") {
+      options.dryRun = true;
+      continue;
+    }
+
+    if (arg === "--no-alerts") {
+      options.sendAlerts = false;
+      continue;
+    }
+
+    throw new Error(`Unknown signals run option: ${arg}`);
+  }
+
+  return options;
 }
 
 function parseFlagOptions(args: readonly string[]): Record<string, string | undefined> {

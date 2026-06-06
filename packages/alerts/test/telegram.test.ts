@@ -28,6 +28,26 @@ describe("TelegramAlertSink", () => {
     expect(formatTradeSignalMessage(signal())).toContain("Expected profit: +23.00 USD");
   });
 
+  it("formats listing evidence when present", () => {
+    expect(
+      formatTradeSignalMessage({
+        ...signal(),
+        evidence: {
+          eligibleListingRows: 3,
+          currentListingRows: 5,
+          selectedPriceRank: 1,
+          nearbyListingRows: 2,
+          variantKind: "regular",
+          variantFilteredRows: 1,
+          marketUrl: "https://market.csgo.com/en/AK-47%20%7C%20Redline%20(Field-Tested)",
+          p10PriceMinor: "7000",
+          medianPriceMinor: "9000",
+          selectedPriceVsMedianBps: -2_222
+        }
+      })
+    ).toContain("Market: https://market.csgo.com/en/AK-47%20%7C%20Redline%20(Field-Tested)");
+  });
+
   it("throws on unsuccessful Telegram responses", async () => {
     const fetchImpl = vi.fn(async () => new Response("bad request", { status: 400 }));
     const sink = new TelegramAlertSink({

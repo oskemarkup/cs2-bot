@@ -36,21 +36,40 @@ export interface WatchlistEntry {
 
 export interface ListingInput {
   readonly marketHashName: string;
+  readonly externalId?: string | null;
   readonly priceMinor: bigint;
   readonly currency: string;
   readonly quantity: number | null;
   readonly observedAt: Date;
+  readonly rawPayload?: unknown;
+}
+
+export interface ListingSelectionStats {
+  readonly variantKind: ItemVariantKind;
+  readonly variantFilteredRows: number;
+  readonly currentListingRows: number;
+  readonly eligibleListingRows: number;
+  readonly selectedPriceRank: number;
+  readonly nearbyListingRows: number;
+  readonly minPriceMinor: bigint;
+  readonly p10PriceMinor: bigint;
+  readonly p25PriceMinor: bigint;
+  readonly medianPriceMinor: bigint;
+  readonly maxPriceMinor: bigint;
+  readonly selectedPriceVsMedianBps: number;
 }
 
 export interface SalesStatsInput {
   readonly marketHashName: string;
   readonly salesCount: number | null;
+  readonly rawPayload?: unknown;
 }
 
 export interface HistoryInput {
   readonly marketHashName: string;
   readonly priceMinor: bigint;
   readonly observedAt: Date;
+  readonly rawPayload?: unknown;
 }
 
 export interface PositionInput {
@@ -66,6 +85,7 @@ export interface PositionInput {
 
 export interface ItemPriceFeatureDecision {
   readonly marketHashName: string;
+  readonly externalId: string | null;
   readonly currency: string;
   readonly priceMinor: bigint;
   readonly fairValueMinor: bigint;
@@ -79,6 +99,7 @@ export interface ItemPriceFeatureDecision {
   readonly liquidityScoreBps: number;
   readonly salesCount: number | null;
   readonly quantity: number | null;
+  readonly listingStats: ListingSelectionStats;
   readonly cohortKey: string;
   readonly baselineKey: string;
   readonly observedAt: Date;
@@ -130,12 +151,22 @@ export interface SignalEvaluationResult {
 
 export interface SignalRunSummary {
   readonly watchlistItems: number;
+  readonly candidateSignals: number;
   readonly baselinesInserted: number;
   readonly featuresInserted: number;
   readonly signalsCreated: number;
   readonly signalsSent: number;
+  readonly dryRun: boolean;
   readonly skipped: readonly string[];
 }
+
+export interface SignalCliOptions {
+  readonly dryRun?: boolean | undefined;
+  readonly sendAlerts?: boolean | undefined;
+}
+
+type ItemVariantKind = "regular" | "stattrak" | "souvenir";
+type JsonRecord = Record<string, unknown>;
 
 export function signalStrategySettingsFromConfig(config: AppConfig): SignalStrategySettings {
   return {
@@ -159,18 +190,19 @@ export function signalStrategySettingsFromConfig(config: AppConfig): SignalStrat
   };
 }
 
-export async function runSignalCli(): Promise<void> {
+export async function runSignalCli(options: SignalCliOptions = {}): Promise<void> {
   const config = loadConfig();
   const logger = createLogger({ level: config.LOG_LEVEL });
   const { db, pool } = createDb(config.DATABASE_URL);
-  const alertSink = telegramSinkFromConfig(config);
+  const alertSink = options.sendAlerts === false ? undefined : telegramSinkFromConfig(config);
 
   try {
     const summary = await runSignalEngine({
       db,
       config,
       alertSink,
-      now: new Date()
+      now: new Date(),
+      dryRun: options.dryRun
     });
 
     logger.info(summary, "signal run finished");
@@ -184,6 +216,7 @@ export async function runSignalEngine(options: {
   readonly config: AppConfig;
   readonly alertSink?: TradeSignalAlertSink | undefined;
   readonly now?: Date | undefined;
+  readonly dryRun?: boolean | undefined;
 }): Promise<SignalRunSummary> {
   const settings = signalStrategySettingsFromConfig(options.config);
   const now = options.now ?? new Date();
@@ -193,10 +226,12 @@ export async function runSignalEngine(options: {
   if (watchlist.length === 0) {
     return {
       watchlistItems: 0,
+      candidateSignals: 0,
       baselinesInserted: 0,
       featuresInserted: 0,
       signalsCreated: 0,
       signalsSent: 0,
+      dryRun: options.dryRun === true,
       skipped: ["watchlist is empty"]
     };
   }
@@ -220,6 +255,20 @@ export async function runSignalEngine(options: {
   });
 
   skipped.push(...evaluation.skipped);
+
+  if (options.dryRun === true) {
+    return {
+      watchlistItems: watchlist.length,
+      candidateSignals: evaluation.signals.length,
+      baselinesInserted: 0,
+      featuresInserted: 0,
+      signalsCreated: 0,
+      signalsSent: 0,
+      dryRun: true,
+      skipped
+    };
+  }
+
   await persistBaselines(options.db, evaluation.baselines);
   await persistFeatures(options.db, evaluation.features);
 
@@ -244,76 +293,96 @@ export async function runSignalEngine(options: {
 
   return {
     watchlistItems: watchlist.length,
+    candidateSignals: evaluation.signals.length,
     baselinesInserted: evaluation.baselines.length,
     featuresInserted: evaluation.features.length,
     signalsCreated,
     signalsSent,
+    dryRun: false,
     skipped
   };
 }
 
 export function evaluateSignals(input: SignalEvaluationInput): SignalEvaluationResult {
-  const watchlistByName = new Map(input.watchlist.map((entry) => [entry.marketHashName, entry]));
-  const salesByName = new Map(input.salesStats.map((entry) => [entry.marketHashName, entry]));
+  const salesByName = groupBy(input.salesStats, (entry) => entry.marketHashName);
   const historyByName = groupBy(input.history, (entry) => entry.marketHashName);
+  const listingsByName = groupBy(input.listings, (entry) => entry.marketHashName);
   const baseFeatures: BaseFeature[] = [];
   const skipped: string[] = [];
   const lookbackCutoff = hoursBefore(input.now, input.settings.lookbackHours);
 
-  for (const listing of input.listings) {
-    const watchlistEntry = watchlistByName.get(listing.marketHashName);
+  for (const watchlistEntry of input.watchlist) {
+    const watchlistVariantKind = variantKindForName(watchlistEntry.marketHashName);
+    const listings = listingsByName.get(watchlistEntry.marketHashName) ?? [];
 
-    if (watchlistEntry === undefined) {
+    if (listings.length === 0) {
+      skipped.push(`no current listings for ${watchlistEntry.marketHashName}`);
       continue;
     }
+
+    const variantListings = listings.filter((listing) => variantKindForListing(listing) === watchlistVariantKind);
 
     const minPriceMinor = watchlistEntry.minPriceMinor ?? input.settings.minPriceMinor;
     const minSalesCount = watchlistEntry.minSalesCount ?? input.settings.minSalesCount;
-    const salesCount = salesByName.get(listing.marketHashName)?.salesCount ?? null;
+    const salesCount =
+      salesByName.get(watchlistEntry.marketHashName)?.find((entry) => variantKindForSalesStats(entry) === watchlistVariantKind)?.salesCount ?? null;
+    const eligibleListings = variantListings.filter(
+      (listing) => listing.priceMinor >= minPriceMinor && (watchlistEntry.maxPriceMinor === null || listing.priceMinor <= watchlistEntry.maxPriceMinor)
+    );
 
-    if (listing.priceMinor < minPriceMinor) {
-      skipped.push(`price below min for ${listing.marketHashName}`);
-      continue;
-    }
-
-    if (watchlistEntry.maxPriceMinor !== null && listing.priceMinor > watchlistEntry.maxPriceMinor) {
-      skipped.push(`price above max for ${listing.marketHashName}`);
+    if (variantListings.length === 0) {
+      skipped.push(`no ${watchlistVariantKind} listings for ${watchlistEntry.marketHashName}`);
       continue;
     }
 
     if ((salesCount ?? 0) < minSalesCount) {
-      skipped.push(`sales below min for ${listing.marketHashName}`);
+      skipped.push(`sales below min for ${watchlistEntry.marketHashName}`);
       continue;
     }
 
-    const itemHistory = [...(historyByName.get(listing.marketHashName) ?? [])].sort(
-      (left, right) => left.observedAt.getTime() - right.observedAt.getTime()
-    );
-    const priceSamples = [...itemHistory.map((entry) => entry.priceMinor), listing.priceMinor];
+    if (eligibleListings.length === 0) {
+      skipped.push(`no eligible listing price for ${watchlistEntry.marketHashName}`);
+      continue;
+    }
+
+    const selectedListing = selectBestBuyListing(eligibleListings);
+    const listingStats = listingSelectionStats({
+      currentListings: listings,
+      eligibleListings,
+      selectedPriceMinor: selectedListing.priceMinor,
+      variantKind: watchlistVariantKind,
+      variantFilteredRows: listings.length - variantListings.length
+    });
+    const itemHistory = [...(historyByName.get(watchlistEntry.marketHashName) ?? [])]
+      .filter((entry) => variantKindForHistory(entry) === watchlistVariantKind)
+      .sort((left, right) => left.observedAt.getTime() - right.observedAt.getTime());
+    const priceSamples = [...itemHistory.map((entry) => entry.priceMinor), selectedListing.priceMinor];
 
     if (priceSamples.length < input.settings.minHistoryPoints) {
-      skipped.push(`not enough history for ${listing.marketHashName}`);
+      skipped.push(`not enough history for ${watchlistEntry.marketHashName}`);
       continue;
     }
 
     const referencePrice = referencePriceFor(itemHistory, lookbackCutoff);
 
-    if (referencePrice === null || referencePrice <= 0n || listing.priceMinor <= 0n) {
-      skipped.push(`missing reference price for ${listing.marketHashName}`);
+    if (referencePrice === null || referencePrice <= 0n || selectedListing.priceMinor <= 0n) {
+      skipped.push(`missing reference price for ${watchlistEntry.marketHashName}`);
       continue;
     }
 
-    const itemReturnBps = logReturnBps(referencePrice, listing.priceMinor);
+    const itemReturnBps = logReturnBps(referencePrice, selectedListing.priceMinor);
 
     baseFeatures.push({
-      listing,
+      listing: selectedListing,
       salesCount,
       referencePriceMinor: referencePrice,
       rollingMedianPriceMinor: medianBigInt(priceSamples),
       itemReturnBps,
-      volatilityBps: volatilityBps([...itemHistory, listing]),
-      liquidityScoreBps: liquidityScoreBps(salesCount, listing.quantity),
-      cohortKey: cohortKeyFor(listing.marketHashName, listing.priceMinor)
+      volatilityBps: volatilityBps([...itemHistory, selectedListing]),
+      liquidityScoreBps: liquidityScoreBps(salesCount, listingStats.eligibleListingRows),
+      listingStats,
+      baselineWeight: baselineWeight(salesCount, listingStats.eligibleListingRows),
+      cohortKey: cohortKeyFor(selectedListing.marketHashName, selectedListing.priceMinor)
     });
   }
 
@@ -341,6 +410,7 @@ export function evaluateSignals(input: SignalEvaluationInput): SignalEvaluationR
 
     return {
       marketHashName: feature.listing.marketHashName,
+      externalId: feature.listing.externalId ?? null,
       currency: feature.listing.currency,
       priceMinor: feature.listing.priceMinor,
       fairValueMinor,
@@ -354,6 +424,7 @@ export function evaluateSignals(input: SignalEvaluationInput): SignalEvaluationR
       liquidityScoreBps: feature.liquidityScoreBps,
       salesCount: feature.salesCount,
       quantity: feature.listing.quantity,
+      listingStats: feature.listingStats,
       cohortKey: feature.cohortKey,
       baselineKey: baseline.baselineKey,
       observedAt: input.now
@@ -541,6 +612,8 @@ interface BaseFeature {
   readonly itemReturnBps: number;
   readonly volatilityBps: number;
   readonly liquidityScoreBps: number;
+  readonly listingStats: ListingSelectionStats;
+  readonly baselineWeight: number;
   readonly cohortKey: string;
 }
 
@@ -585,10 +658,12 @@ async function loadCurrentListings(db: ReturnType<typeof createDb>["db"], names:
   const rows = await db
     .select({
       marketHashName: schema.itemListingCurrent.marketHashName,
+      externalId: schema.itemListingCurrent.externalId,
       priceMinor: schema.itemListingCurrent.priceMinor,
       currency: schema.itemListingCurrent.currency,
       quantity: schema.itemListingCurrent.quantity,
-      observedAt: schema.itemListingCurrent.lastSeenAt
+      observedAt: schema.itemListingCurrent.lastSeenAt,
+      rawPayload: schema.itemListingCurrent.rawPayload
     })
     .from(schema.itemListingCurrent)
     .where(and(eq(schema.itemListingCurrent.marketplace, marketCsgo), inArray(schema.itemListingCurrent.marketHashName, names)));
@@ -603,7 +678,8 @@ async function loadCurrentSalesStats(
   const rows = await db
     .select({
       marketHashName: schema.salesStatsCurrent.marketHashName,
-      salesCount: schema.salesStatsCurrent.salesCount
+      salesCount: schema.salesStatsCurrent.salesCount,
+      rawPayload: schema.salesStatsCurrent.rawPayload
     })
     .from(schema.salesStatsCurrent)
     .where(and(eq(schema.salesStatsCurrent.marketplace, marketCsgo), inArray(schema.salesStatsCurrent.marketHashName, names)));
@@ -620,7 +696,8 @@ async function loadListingHistory(
     .select({
       marketHashName: schema.itemListingSnapshots.marketHashName,
       priceMinor: schema.itemListingSnapshots.priceMinor,
-      observedAt: schema.itemListingSnapshots.observedAt
+      observedAt: schema.itemListingSnapshots.observedAt,
+      rawPayload: schema.itemListingSnapshots.rawPayload
     })
     .from(schema.itemListingSnapshots)
     .where(
@@ -789,7 +866,8 @@ function tradeSignalAlert(signal: TradeSignalDecision): TradeSignalAlert {
     residualBps: signal.residualBps,
     baselineKey: signal.baselineKey,
     reason: signal.reason,
-    observedAt: signal.observedAt
+    observedAt: signal.observedAt,
+    evidence: signal.evidence
   };
 
   return signal.unlockAt === undefined ? base : { ...base, unlockAt: signal.unlockAt };
@@ -798,7 +876,7 @@ function tradeSignalAlert(signal: TradeSignalDecision): TradeSignalAlert {
 function baselineFor(baselineKey: string, features: readonly BaseFeature[], observedAt: Date): MarketBaselineDecision {
   const returns = features.map((feature) => ({
     value: feature.itemReturnBps,
-    weight: Math.max(1, feature.salesCount ?? 1)
+    weight: feature.baselineWeight
   }));
   const medianReturnBps = weightedMedian(returns);
   const dispersionBps = Math.max(
@@ -814,6 +892,135 @@ function baselineFor(baselineKey: string, features: readonly BaseFeature[], obse
     dispersionBps,
     observedAt
   };
+}
+
+function selectBestBuyListing(listings: readonly ListingInput[]): ListingInput {
+  const selected = [...listings].sort((left, right) => {
+    if (left.priceMinor !== right.priceMinor) {
+      return left.priceMinor < right.priceMinor ? -1 : 1;
+    }
+
+    return right.observedAt.getTime() - left.observedAt.getTime();
+  })[0];
+
+  if (selected === undefined) {
+    throw new Error("cannot select a buy listing from an empty listing set");
+  }
+
+  return selected;
+}
+
+function listingSelectionStats(options: {
+  currentListings: readonly ListingInput[],
+  eligibleListings: readonly ListingInput[],
+  selectedPriceMinor: bigint,
+  variantKind: ItemVariantKind,
+  variantFilteredRows: number
+}): ListingSelectionStats {
+  const eligiblePrices = options.eligibleListings.map((listing) => listing.priceMinor);
+  const selectedPriceRank = eligiblePrices.filter((price) => price < options.selectedPriceMinor).length + 1;
+  const nearbyCeilingMinor = applyBps(options.selectedPriceMinor, 10_300);
+
+  return {
+    variantKind: options.variantKind,
+    variantFilteredRows: options.variantFilteredRows,
+    currentListingRows: options.currentListings.length,
+    eligibleListingRows: options.eligibleListings.length,
+    selectedPriceRank,
+    nearbyListingRows: eligiblePrices.filter((price) => price >= options.selectedPriceMinor && price <= nearbyCeilingMinor).length,
+    minPriceMinor: minBigInt(eligiblePrices),
+    p10PriceMinor: percentileBigInt(eligiblePrices, 0.1),
+    p25PriceMinor: percentileBigInt(eligiblePrices, 0.25),
+    medianPriceMinor: medianBigInt(eligiblePrices),
+    maxPriceMinor: maxBigInt(eligiblePrices),
+    selectedPriceVsMedianBps: relativeBps(options.selectedPriceMinor, medianBigInt(eligiblePrices))
+  };
+}
+
+function variantKindForListing(listing: ListingInput): ItemVariantKind {
+  return variantKindFromPayload(listing.rawPayload) ?? variantKindForName(listing.marketHashName);
+}
+
+function variantKindForSalesStats(salesStats: SalesStatsInput): ItemVariantKind {
+  return variantKindFromPayload(salesStats.rawPayload) ?? variantKindForName(salesStats.marketHashName);
+}
+
+function variantKindForHistory(history: HistoryInput): ItemVariantKind {
+  return variantKindFromPayload(history.rawPayload) ?? variantKindForName(history.marketHashName);
+}
+
+function variantKindFromPayload(payload: unknown): ItemVariantKind | null {
+  const object = readJsonRecord(payload);
+
+  if (object === null) {
+    return null;
+  }
+
+  if (hasTruthyVariantField(object, ["souvenir"])) {
+    return "souvenir";
+  }
+
+  if (hasTruthyVariantField(object, ["stattrak", "stat_trak"])) {
+    return "stattrak";
+  }
+
+  for (const key of ["market_hash_name", "market_name", "name", "ru_name"]) {
+    const value = object[key];
+
+    if (typeof value === "string") {
+      const variantKind = variantKindForName(value);
+
+      if (variantKind !== "regular") {
+        return variantKind;
+      }
+    }
+  }
+
+  return null;
+}
+
+function hasTruthyVariantField(object: JsonRecord, keys: readonly string[]): boolean {
+  return keys.some((key) => isTruthyVariantValue(object[key]));
+}
+
+function isTruthyVariantValue(value: unknown): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+
+    return ["1", "true", "yes", "stattrak", "souvenir"].includes(normalized);
+  }
+
+  return false;
+}
+
+function variantKindForName(marketHashName: string): ItemVariantKind {
+  const normalized = marketHashName.trim().toLowerCase();
+
+  if (normalized.startsWith("stattrak")) {
+    return "stattrak";
+  }
+
+  if (normalized.startsWith("souvenir")) {
+    return "souvenir";
+  }
+
+  return "regular";
+}
+
+function readJsonRecord(value: unknown): JsonRecord | null {
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    return value as JsonRecord;
+  }
+
+  return null;
 }
 
 function referencePriceFor(history: readonly HistoryInput[], lookbackCutoff: Date): bigint | null {
@@ -848,8 +1055,15 @@ function volatilityBps(samples: readonly { readonly priceMinor: bigint; readonly
   return median(returns.map((value) => Math.abs(value - medianReturn)));
 }
 
-function liquidityScoreBps(salesCount: number | null, quantity: number | null): number {
-  return clamp((salesCount ?? 0) * 750 + (quantity ?? 0) * 250, 0, 10_000);
+function liquidityScoreBps(salesCount: number | null, eligibleListingRows: number): number {
+  return clamp((salesCount ?? 0) * 500 + eligibleListingRows * 100, 0, 10_000);
+}
+
+function baselineWeight(salesCount: number | null, eligibleListingRows: number): number {
+  const salesWeight = salesCount === null ? 1 : Math.ceil(salesCount / 10);
+  const listingWeight = Math.ceil(eligibleListingRows / 50);
+
+  return clamp(Math.max(1, salesWeight, listingWeight), 1, 5);
 }
 
 function buyConfidenceBps(feature: ItemPriceFeatureDecision, settings: SignalStrategySettings): number {
@@ -876,6 +1090,8 @@ function sellConfidenceBps(
 function signalEvidence(feature: ItemPriceFeatureDecision, expectedEdgeBps: number): Record<string, unknown> {
   return {
     priceMinor: feature.priceMinor.toString(),
+    externalId: feature.externalId ?? null,
+    marketUrl: marketCsgoItemUrl(feature.marketHashName),
     fairValueMinor: feature.fairValueMinor.toString(),
     referencePriceMinor: feature.referencePriceMinor.toString(),
     rollingMedianPriceMinor: feature.rollingMedianPriceMinor.toString(),
@@ -888,9 +1104,25 @@ function signalEvidence(feature: ItemPriceFeatureDecision, expectedEdgeBps: numb
     liquidityScoreBps: feature.liquidityScoreBps,
     salesCount: feature.salesCount,
     quantity: feature.quantity,
+    variantKind: feature.listingStats.variantKind,
+    variantFilteredRows: feature.listingStats.variantFilteredRows,
+    currentListingRows: feature.listingStats.currentListingRows,
+    eligibleListingRows: feature.listingStats.eligibleListingRows,
+    selectedPriceRank: feature.listingStats.selectedPriceRank,
+    nearbyListingRows: feature.listingStats.nearbyListingRows,
+    minPriceMinor: feature.listingStats.minPriceMinor.toString(),
+    p10PriceMinor: feature.listingStats.p10PriceMinor.toString(),
+    p25PriceMinor: feature.listingStats.p25PriceMinor.toString(),
+    medianPriceMinor: feature.listingStats.medianPriceMinor.toString(),
+    maxPriceMinor: feature.listingStats.maxPriceMinor.toString(),
+    selectedPriceVsMedianBps: feature.listingStats.selectedPriceVsMedianBps,
     cohortKey: feature.cohortKey,
     baselineKey: feature.baselineKey
   };
+}
+
+function marketCsgoItemUrl(marketHashName: string): string {
+  return `https://market.csgo.com/en/${encodeURIComponent(marketHashName)}`;
 }
 
 function expectedBuyProfitMinor(currentPriceMinor: bigint, fairValueMinor: bigint, settings: SignalStrategySettings): bigint {
@@ -945,6 +1177,34 @@ function medianBigInt(values: readonly bigint[]): bigint {
   }
 
   return ((sorted[middle - 1] ?? middleValue) + middleValue) / 2n;
+}
+
+function percentileBigInt(values: readonly bigint[], percentile: number): bigint {
+  const sorted = [...values].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+
+  if (sorted.length === 0) {
+    return 0n;
+  }
+
+  const index = Math.max(0, Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * percentile)));
+
+  return sorted[index] ?? 0n;
+}
+
+function minBigInt(values: readonly bigint[]): bigint {
+  return values.reduce<bigint | null>((minimum, value) => (minimum === null || value < minimum ? value : minimum), null) ?? 0n;
+}
+
+function maxBigInt(values: readonly bigint[]): bigint {
+  return values.reduce<bigint | null>((maximum, value) => (maximum === null || value > maximum ? value : maximum), null) ?? 0n;
+}
+
+function relativeBps(value: bigint, baseline: bigint): number {
+  if (baseline <= 0n) {
+    return 0;
+  }
+
+  return Number(((value - baseline) * 10_000n) / baseline);
 }
 
 function median(values: readonly number[]): number {

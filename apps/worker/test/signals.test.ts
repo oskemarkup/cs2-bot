@@ -63,6 +63,83 @@ describe("evaluateSignals", () => {
     expect(result.signals[0]?.residualBps).toBeLessThan(-800);
   });
 
+  it("aggregates listing rows and emits one buy signal using the best eligible ask", () => {
+    const result = evaluateSignals({
+      watchlist: [watch("AK-47 | Redline (Field-Tested)"), watch("M4A1-S | Cyrex (Field-Tested)"), watch("AWP | Asiimov (Field-Tested)")],
+      listings: [
+        listing("AK-47 | Redline (Field-Tested)", 90_00n),
+        listing("AK-47 | Redline (Field-Tested)", 70_00n),
+        listing("AK-47 | Redline (Field-Tested)", 95_00n),
+        listing("M4A1-S | Cyrex (Field-Tested)", 100_00n),
+        listing("AWP | Asiimov (Field-Tested)", 100_00n)
+      ],
+      salesStats: [
+        sales("AK-47 | Redline (Field-Tested)"),
+        sales("M4A1-S | Cyrex (Field-Tested)"),
+        sales("AWP | Asiimov (Field-Tested)")
+      ],
+      history: [
+        history("AK-47 | Redline (Field-Tested)", 100_00n),
+        history("M4A1-S | Cyrex (Field-Tested)", 100_00n),
+        history("AWP | Asiimov (Field-Tested)", 100_00n)
+      ],
+      positions: [],
+      now,
+      settings: settings()
+    });
+
+    expect(result.features).toHaveLength(3);
+    expect(result.signals).toHaveLength(1);
+    expect(result.signals[0]).toMatchObject({
+      side: "buy",
+      marketHashName: "AK-47 | Redline (Field-Tested)",
+      priceMinor: 70_00n,
+      evidence: expect.objectContaining({
+        eligibleListingRows: 3,
+        marketUrl: "https://market.csgo.com/en/AK-47%20%7C%20Redline%20(Field-Tested)",
+        selectedPriceRank: 1,
+        medianPriceMinor: "9000"
+      })
+    });
+  });
+
+  it("does not mix regular and StatTrak listings with the same market hash name", () => {
+    const result = evaluateSignals({
+      watchlist: [watch("AK-47 | Redline (Field-Tested)"), watch("M4A1-S | Cyrex (Field-Tested)"), watch("AWP | Asiimov (Field-Tested)")],
+      listings: [
+        listing("AK-47 | Redline (Field-Tested)", 100_00n),
+        listing("AK-47 | Redline (Field-Tested)", 70_00n, {
+          market_hash_name: "StatTrak™ AK-47 | Redline (Field-Tested)"
+        }),
+        listing("M4A1-S | Cyrex (Field-Tested)", 100_00n),
+        listing("AWP | Asiimov (Field-Tested)", 100_00n)
+      ],
+      salesStats: [
+        sales("AK-47 | Redline (Field-Tested)"),
+        sales("M4A1-S | Cyrex (Field-Tested)"),
+        sales("AWP | Asiimov (Field-Tested)")
+      ],
+      history: [
+        history("AK-47 | Redline (Field-Tested)", 100_00n),
+        history("M4A1-S | Cyrex (Field-Tested)", 100_00n),
+        history("AWP | Asiimov (Field-Tested)", 100_00n)
+      ],
+      positions: [],
+      now,
+      settings: settings()
+    });
+
+    expect(result.signals).toEqual([]);
+    expect(result.features.find((feature) => feature.marketHashName === "AK-47 | Redline (Field-Tested)")).toMatchObject({
+      priceMinor: 100_00n,
+      listingStats: expect.objectContaining({
+        variantKind: "regular",
+        variantFilteredRows: 1,
+        eligibleListingRows: 1
+      })
+    });
+  });
+
   it("does not emit sell before unlock and emits sell after unlock when profit target is met", () => {
     const baseInput = {
       watchlist: [watch("AK-47 | Redline (Field-Tested)"), watch("M4A1-S | Cyrex (Field-Tested)"), watch("AWP | Asiimov (Field-Tested)")],
@@ -132,13 +209,14 @@ function watch(marketHashName: string) {
   };
 }
 
-function listing(marketHashName: string, priceMinor: bigint) {
+function listing(marketHashName: string, priceMinor: bigint, rawPayload?: unknown) {
   return {
     marketHashName,
     priceMinor,
     currency: "USD",
     quantity: 10,
-    observedAt: now
+    observedAt: now,
+    rawPayload
   };
 }
 
