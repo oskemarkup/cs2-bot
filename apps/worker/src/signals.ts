@@ -1,10 +1,11 @@
 import { TelegramAlertSink, type TradeSignalAlert, type TradeSignalAlertSink } from "@cs2-bot/alerts";
 import { loadConfig, type AppConfig } from "@cs2-bot/config";
 import { createLogger } from "@cs2-bot/core";
-import { and, createDb, eq, gte, inArray, or, schema } from "@cs2-bot/db";
+import { and, createDb, eq, gte, inArray, insertInBatches, or, schema } from "@cs2-bot/db";
 
 const marketCsgo = "market_csgo" as const;
 const globalBaselineKey = "global";
+const signalPersistenceBatchSize = 250;
 
 export interface SignalStrategySettings {
   readonly lookbackHours: number;
@@ -659,17 +660,24 @@ async function persistBaselines(
     return;
   }
 
-  await db.insert(schema.marketBaselineSnapshots).values(
-    baselines.map((baseline) => ({
-      marketplace: marketCsgo,
-      baselineKey: baseline.baselineKey,
-      currency: baseline.currency,
-      itemsCount: baseline.itemsCount,
-      medianReturnBps: baseline.medianReturnBps,
-      dispersionBps: baseline.dispersionBps,
-      observedAt: baseline.observedAt
-    }))
-  );
+  const rows = baselines.map((baseline) => ({
+    marketplace: marketCsgo,
+    baselineKey: baseline.baselineKey,
+    currency: baseline.currency,
+    itemsCount: baseline.itemsCount,
+    medianReturnBps: baseline.medianReturnBps,
+    dispersionBps: baseline.dispersionBps,
+    observedAt: baseline.observedAt
+  }));
+
+  await insertInBatches({
+    table: "market_baseline_snapshot",
+    rows,
+    batchSize: signalPersistenceBatchSize,
+    insertRows: async (batch) => {
+      await db.insert(schema.marketBaselineSnapshots).values([...batch]);
+    }
+  });
 }
 
 async function persistFeatures(
@@ -680,28 +688,35 @@ async function persistFeatures(
     return;
   }
 
-  await db.insert(schema.itemPriceFeatures).values(
-    features.map((feature) => ({
-      marketplace: marketCsgo,
-      marketHashName: feature.marketHashName,
-      currency: feature.currency,
-      priceMinor: feature.priceMinor,
-      fairValueMinor: feature.fairValueMinor,
-      referencePriceMinor: feature.referencePriceMinor,
-      rollingMedianPriceMinor: feature.rollingMedianPriceMinor,
-      itemReturnBps: feature.itemReturnBps,
-      baselineReturnBps: feature.baselineReturnBps,
-      residualBps: feature.residualBps,
-      zScoreBps: feature.zScoreBps,
-      volatilityBps: feature.volatilityBps,
-      liquidityScoreBps: feature.liquidityScoreBps,
-      salesCount: feature.salesCount,
-      quantity: feature.quantity,
-      cohortKey: feature.cohortKey,
-      baselineKey: feature.baselineKey,
-      observedAt: feature.observedAt
-    }))
-  );
+  const rows = features.map((feature) => ({
+    marketplace: marketCsgo,
+    marketHashName: feature.marketHashName,
+    currency: feature.currency,
+    priceMinor: feature.priceMinor,
+    fairValueMinor: feature.fairValueMinor,
+    referencePriceMinor: feature.referencePriceMinor,
+    rollingMedianPriceMinor: feature.rollingMedianPriceMinor,
+    itemReturnBps: feature.itemReturnBps,
+    baselineReturnBps: feature.baselineReturnBps,
+    residualBps: feature.residualBps,
+    zScoreBps: feature.zScoreBps,
+    volatilityBps: feature.volatilityBps,
+    liquidityScoreBps: feature.liquidityScoreBps,
+    salesCount: feature.salesCount,
+    quantity: feature.quantity,
+    cohortKey: feature.cohortKey,
+    baselineKey: feature.baselineKey,
+    observedAt: feature.observedAt
+  }));
+
+  await insertInBatches({
+    table: "item_price_feature",
+    rows,
+    batchSize: signalPersistenceBatchSize,
+    insertRows: async (batch) => {
+      await db.insert(schema.itemPriceFeatures).values([...batch]);
+    }
+  });
 }
 
 async function hasRecentSignal(
